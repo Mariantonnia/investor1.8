@@ -49,21 +49,21 @@ Clasifica la preocupación principal en una de estas categorías:
 
 Si la respuesta es demasiado breve o poco clara, solicita más detalles de manera específica.  
 
-Luego, genera una pregunta de seguimiento enfocada en la categoría detectada para profundizar en la opinión del inversor.  
-Por ejemplo:  
-- Si la categoría es Ambiental: "¿Cómo crees que esto afecta la sostenibilidad del sector?"  
-- Si la categoría es Social: "¿Crees que esto puede afectar la percepción pública de la empresa?"  
-- Si la categoría es Gobernanza: "¿Este evento te hace confiar más o menos en la gestión de la empresa?"  
-- Si la categoría es Riesgo: "¿Consideras que esto aumenta la incertidumbre en el mercado?" 
+Genera una pregunta de seguimiento enfocada en la categoría detectada.  
+Ejemplos:  
+- Ambiental: "¿Cómo crees que esto afecta la sostenibilidad del sector?"  
+- Social: "¿Crees que esto puede afectar la percepción pública de la empresa?"  
+- Gobernanza: "¿Este evento te hace confiar más o menos en la gestión de la empresa?"  
+- Riesgo: "¿Consideras que esto aumenta la incertidumbre en el mercado?" 
 """
 prompt_reaccion = PromptTemplate(template=plantilla_reaccion, input_variables=["reaccion"])
 cadena_reaccion = LLMChain(llm=llm, prompt=prompt_reaccion)
 
 plantilla_perfil = """
 Análisis de respuestas: {analisis}
-Genera un perfil detallado del inversor basado en sus respuestas, enfocándote en los pilares ESG (Ambiental, Social y Gobernanza) y su aversión al riesgo. 
-Asigna una puntuación de 0 a 100 para cada pilar ESG y para el riesgo, donde 0 indica ninguna preocupación y 100 máxima preocupación o aversión.
-Devuelve las 4 puntuaciones en formato: Ambiental: [puntuación], Social: [puntuación], Gobernanza: [puntuación], Riesgo: [puntuación]
+Genera un perfil del inversor basado en sus respuestas, con puntuaciones ESG (0-100) y aversión al riesgo. 
+Formato de salida:
+Ambiental: [puntuación], Social: [puntuación], Gobernanza: [puntuación], Riesgo: [puntuación]
 """
 prompt_perfil = PromptTemplate(template=plantilla_perfil, input_variables=["analisis"])
 cadena_perfil = LLMChain(llm=llm, prompt=prompt_perfil)
@@ -85,7 +85,7 @@ for mensaje in st.session_state.historial:
     with st.chat_message(mensaje["tipo"]):
         st.write(mensaje["contenido"])
 
-# 1. PREGUNTAS INICIALES
+# 1. PREGUNTAS INICIALES (con validación de longitud)
 if st.session_state.contador_pregunta < len(preguntas_inversor):
     if not st.session_state.mostrada_pregunta:
         pregunta_actual = preguntas_inversor[st.session_state.contador_pregunta]
@@ -97,46 +97,49 @@ if st.session_state.contador_pregunta < len(preguntas_inversor):
     user_input = st.chat_input("Escribe tu respuesta aquí...")
 
     if user_input:
-        st.session_state.historial.append({"tipo": "user", "contenido": user_input})
-        st.session_state.respuestas_inversor.append(user_input)
-        st.session_state.contador_pregunta += 1
-        st.session_state.mostrada_pregunta = False
+        # Validar longitud mínima (5 palabras)
+        if len(user_input.split()) < 5:
+            with st.chat_message("bot", avatar="🤖"):
+                st.write("⚠️ Por favor, desarrolla tu respuesta con al menos 5 palabras para entender mejor tu perfil.")
+            st.session_state.historial.append({"tipo": "bot", "contenido": "⚠️ Amplía tu respuesta."})
+        else:
+            st.session_state.historial.append({"tipo": "user", "contenido": user_input})
+            st.session_state.respuestas_inversor.append(user_input)
+            st.session_state.contador_pregunta += 1
+            st.session_state.mostrada_pregunta = False
         st.rerun()
     st.stop()
 
-# 2. NOTICIAS
+# 2. NOTICIAS (validación idéntica)
 if st.session_state.contador < len(noticias):
     if not st.session_state.mostrada_noticia:
         noticia = noticias[st.session_state.contador]
         with st.chat_message("bot", avatar="🤖"):
-            st.write(f"¿Qué opinas sobre esta noticia? {noticia}")
-        st.session_state.historial.append({"tipo": "bot", "contenido": noticia})
+            st.write(f"📰 Noticia: {noticia}\n\n¿Qué opinas?")
+        st.session_state.historial.append({"tipo": "bot", "contenido": f"📰 {noticia}"})
         st.session_state.mostrada_noticia = True
 
-    user_input = st.chat_input("Escribe tu respuesta aquí...")
+    user_input = st.chat_input("Escribe tu opinión aquí...")
 
     if user_input:
-        st.session_state.historial.append({"tipo": "user", "contenido": user_input})
-        st.session_state.reacciones.append(user_input)
-        analisis_reaccion = cadena_reaccion.run(reaccion=user_input)
         if len(user_input.split()) < 5:
             with st.chat_message("bot", avatar="🤖"):
-                st.write("Podrías ampliar un poco más tu opinión?")
-            st.session_state.historial.append({"tipo": "bot", "contenido": "Podrías ampliar un poco más tu opinión?"})
+                st.write("⚠️ Por favor, desarrolla tu opinión con al menos 5 palabras.")
+            st.session_state.historial.append({"tipo": "bot", "contenido": "⚠️ Amplía tu opinión."})
         else:
+            st.session_state.historial.append({"tipo": "user", "contenido": user_input})
+            st.session_state.reacciones.append(user_input)
+            analisis_reaccion = cadena_reaccion.run(reaccion=user_input)
             st.session_state.contador += 1
             st.session_state.mostrada_noticia = False
-            st.rerun()
+        st.rerun()
 
-# 3. PERFIL Y GUARDADO
+# 3. PERFIL Y GUARDADO (igual que antes)
 else:
     analisis_total = "\n".join(st.session_state.respuestas_inversor + st.session_state.reacciones)
     perfil = cadena_perfil.run(analisis=analisis_total)
 
-    with st.chat_message("bot", avatar="🤖"):
-        st.write(f"**Perfil del inversor:** {perfil}")
-    st.session_state.historial.append({"tipo": "bot", "contenido": f"**Perfil del inversor:** {perfil}"})
-
+    # Extraer puntuaciones y mostrar gráfico
     puntuaciones = {
         "Ambiental": int(re.search(r"Ambiental: (\d+)", perfil).group(1)),
         "Social": int(re.search(r"Social: (\d+)", perfil).group(1)),
@@ -144,34 +147,21 @@ else:
         "Riesgo": int(re.search(r"Riesgo: (\d+)", perfil).group(1)),
     }
 
-    categorias = list(puntuaciones.keys())
-    valores = list(puntuaciones.values())
-
+    # Gráfico
     fig, ax = plt.subplots()
-    ax.bar(categorias, valores)
+    ax.bar(puntuaciones.keys(), puntuaciones.values())
     ax.set_ylabel("Puntuación (0-100)")
-    ax.set_title("Perfil del Inversor")
+    ax.set_title("Perfil ESG y Riesgo")
     st.pyplot(fig)
 
+    # Guardar en Google Sheets (requiere credenciales en st.secrets)
     try:
-        creds_json_str = st.secrets["gcp_service_account"]
-        creds_json = json.loads(creds_json_str)
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(st.secrets["gcp_service_account"], scope)
+        client = gspread.authorize(creds)
+        sheet = client.open('BBDD_RESPUESTAS').sheet1
+        fila = st.session_state.respuestas_inversor + st.session_state.reacciones + list(puntuaciones.values())
+        sheet.append_row(fila)
+        st.success("✅ Datos guardados correctamente.")
     except Exception as e:
-        st.error(f"Error al cargar las credenciales: {e}")
-        st.stop()
-
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_json, scope)
-    client = gspread.authorize(creds)
-    sheet = client.open('BBDD_RESPUESTAS').sheet1
-
-    fila = st.session_state.respuestas_inversor + st.session_state.reacciones
-    fila.extend([
-        puntuaciones["Ambiental"],
-        puntuaciones["Social"],
-        puntuaciones["Gobernanza"],
-        puntuaciones["Riesgo"]
-    ])
-    sheet.append_row(fila)
-
-    st.success("Respuestas y perfil guardados en Google Sheets en una misma fila.")
+        st.error(f"❌ Error al guardar: {e}")
