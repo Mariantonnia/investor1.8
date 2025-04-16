@@ -26,8 +26,6 @@ preguntas_inversor = [
     "¿Cuál es tu objetivo principal al invertir?",
     "¿Cuál es tu horizonte temporal de inversión?",
     "¿Tienes experiencia previa invirtiendo en activos de mayor riesgo como acciones, criptomonedas o fondos alternativos?",
-    "¿Estás dispuesto a sacrificar parte de la rentabilidad potencial a cambio de un impacto social o ambiental positivo?",
-    "¿Qué opinas sobre el cambio climático?"
 ]
 
 # Noticias
@@ -78,7 +76,7 @@ if "historial" not in st.session_state:
     st.session_state.respuestas_inversor = []
     st.session_state.contador_pregunta = 0
     st.session_state.mostrada_noticia = False
-    st.session_state.mostrada_pregunta = False  # Nuevo estado para evitar duplicados
+    st.session_state.mostrada_pregunta = False
 
 st.title("Chatbot de Análisis de Sentimiento")
 
@@ -89,12 +87,12 @@ for mensaje in st.session_state.historial:
 
 # 1. PREGUNTAS INICIALES
 if st.session_state.contador_pregunta < len(preguntas_inversor):
-    if not st.session_state.mostrada_pregunta:  # Evitar duplicados
+    if not st.session_state.mostrada_pregunta:
         pregunta_actual = preguntas_inversor[st.session_state.contador_pregunta]
         with st.chat_message("bot", avatar="🤖"):
             st.write(pregunta_actual)
         st.session_state.historial.append({"tipo": "bot", "contenido": pregunta_actual})
-        st.session_state.mostrada_pregunta = True  # Marcar que ya se mostró
+        st.session_state.mostrada_pregunta = True
 
     user_input = st.chat_input("Escribe tu respuesta aquí...")
 
@@ -102,9 +100,9 @@ if st.session_state.contador_pregunta < len(preguntas_inversor):
         st.session_state.historial.append({"tipo": "user", "contenido": user_input})
         st.session_state.respuestas_inversor.append(user_input)
         st.session_state.contador_pregunta += 1
-        st.session_state.mostrada_pregunta = False  # Permitir mostrar la siguiente pregunta
+        st.session_state.mostrada_pregunta = False
         st.rerun()
-    st.stop()  # Evitar continuar hasta que el usuario responda
+    st.stop()
 
 # 2. NOTICIAS
 if st.session_state.contador < len(noticias):
