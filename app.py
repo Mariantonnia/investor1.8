@@ -36,11 +36,7 @@ noticias = [
     "Amancio Ortega crea un fondo de 100 millones de euros para los afectados de la dana",
     "Freshly Cosmetics despide a 52 empleados en Reus, el 18% de la plantilla",
     "Wall Street y los mercados globales caen ante la incertidumbre por la guerra comercial y el temor a una recesión",
-    "El mercado de criptomonedas se desploma: Bitcoin cae a 80.000 dólares, las altcoins se hunden en medio de una frenética liquidación",
-    "Granada retrasa seis meses el inicio de la Zona de Bajas Emisiones, previsto hasta ahora para abril",
-    "McDonald's donará a la Fundación Ronald McDonald todas las ganancias por ventas del Big Mac del 6 de diciembre",
-    "El Gobierno autoriza a altos cargos públicos a irse a Indra, Escribano, CEOE, Barceló, Iberdrola o Airbus",
-    "Las aportaciones a los planes de pensiones caen 10.000 millones en los últimos cuatro años"
+    "El mercado de criptomonedas se desploma: Bitcoin cae a 80.000 dólares, las altcoins se hunden en medio de una frenética liquidación"
 ]
 
 # Prompts
@@ -79,9 +75,10 @@ if "historial" not in st.session_state:
     st.session_state.historial = []
     st.session_state.contador = 0
     st.session_state.reacciones = []
-    st.session_state.mostrada_noticia = False
-    st.session_state.contador_pregunta = 0
     st.session_state.respuestas_inversor = []
+    st.session_state.contador_pregunta = 0
+    st.session_state.mostrada_noticia = False
+    st.session_state.mostrada_pregunta = False  # Nuevo estado para evitar duplicados
 
 st.title("Chatbot de Análisis de Sentimiento")
 
@@ -92,10 +89,12 @@ for mensaje in st.session_state.historial:
 
 # 1. PREGUNTAS INICIALES
 if st.session_state.contador_pregunta < len(preguntas_inversor):
-    pregunta_actual = preguntas_inversor[st.session_state.contador_pregunta]
-    with st.chat_message("bot", avatar="🤖"):
-        st.write(pregunta_actual)
-    st.session_state.historial.append({"tipo": "bot", "contenido": pregunta_actual})
+    if not st.session_state.mostrada_pregunta:  # Evitar duplicados
+        pregunta_actual = preguntas_inversor[st.session_state.contador_pregunta]
+        with st.chat_message("bot", avatar="🤖"):
+            st.write(pregunta_actual)
+        st.session_state.historial.append({"tipo": "bot", "contenido": pregunta_actual})
+        st.session_state.mostrada_pregunta = True  # Marcar que ya se mostró
 
     user_input = st.chat_input("Escribe tu respuesta aquí...")
 
@@ -103,8 +102,9 @@ if st.session_state.contador_pregunta < len(preguntas_inversor):
         st.session_state.historial.append({"tipo": "user", "contenido": user_input})
         st.session_state.respuestas_inversor.append(user_input)
         st.session_state.contador_pregunta += 1
+        st.session_state.mostrada_pregunta = False  # Permitir mostrar la siguiente pregunta
         st.rerun()
-    st.stop()
+    st.stop()  # Evitar continuar hasta que el usuario responda
 
 # 2. NOTICIAS
 if st.session_state.contador < len(noticias):
