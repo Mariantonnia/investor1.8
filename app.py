@@ -66,8 +66,8 @@ prompt_reaccion = PromptTemplate(template=plantilla_reaccion, input_variables=["
 cadena_reaccion = LLMChain(llm=llm, prompt=prompt_reaccion)
 
 plantilla_perfil = """
-Análisis de reacciones: {analisis}
-Genera un perfil detallado del inversor basado en sus reacciones, enfocándote en los pilares ESG (Ambiental, Social y Gobernanza) y su aversión al riesgo. 
+Análisis de respuestas: {analisis}
+Genera un perfil detallado del inversor basado en sus respuestas, enfocándote en los pilares ESG (Ambiental, Social y Gobernanza) y su aversión al riesgo. 
 Asigna una puntuación de 0 a 100 para cada pilar ESG y para el riesgo, donde 0 indica ninguna preocupación y 100 máxima preocupación o aversión.
 Devuelve las 4 puntuaciones en formato: Ambiental: [puntuación], Social: [puntuación], Gobernanza: [puntuación], Riesgo: [puntuación]
 """
@@ -95,6 +95,7 @@ if st.session_state.contador_pregunta < len(preguntas_inversor):
     pregunta_actual = preguntas_inversor[st.session_state.contador_pregunta]
     with st.chat_message("bot", avatar="🤖"):
         st.write(pregunta_actual)
+    st.session_state.historial.append({"tipo": "bot", "contenido": pregunta_actual})
 
     user_input = st.chat_input("Escribe tu respuesta aquí...")
 
@@ -105,7 +106,7 @@ if st.session_state.contador_pregunta < len(preguntas_inversor):
         st.rerun()
     st.stop()
 
-# 2. MOSTRAR NOTICIAS UNA A UNA
+# 2. NOTICIAS
 if st.session_state.contador < len(noticias):
     if not st.session_state.mostrada_noticia:
         noticia = noticias[st.session_state.contador]
@@ -115,6 +116,7 @@ if st.session_state.contador < len(noticias):
         st.session_state.mostrada_noticia = True
 
     user_input = st.chat_input("Escribe tu respuesta aquí...")
+
     if user_input:
         st.session_state.historial.append({"tipo": "user", "contenido": user_input})
         st.session_state.reacciones.append(user_input)
@@ -128,9 +130,9 @@ if st.session_state.contador < len(noticias):
             st.session_state.mostrada_noticia = False
             st.rerun()
 
-# 3. PERFIL FINAL Y GUARDADO
+# 3. PERFIL Y GUARDADO
 else:
-    analisis_total = "\n".join(st.session_state.reacciones)
+    analisis_total = "\n".join(st.session_state.respuestas_inversor + st.session_state.reacciones)
     perfil = cadena_perfil.run(analisis=analisis_total)
 
     with st.chat_message("bot", avatar="🤖"):
@@ -144,7 +146,6 @@ else:
         "Riesgo": int(re.search(r"Riesgo: (\d+)", perfil).group(1)),
     }
 
-    # Mostrar gráfico
     categorias = list(puntuaciones.keys())
     valores = list(puntuaciones.values())
 
@@ -155,20 +156,17 @@ else:
     st.pyplot(fig)
 
     try:
-        # Cargar credenciales
         creds_json_str = st.secrets["gcp_service_account"]
         creds_json = json.loads(creds_json_str)
     except Exception as e:
         st.error(f"Error al cargar las credenciales: {e}")
         st.stop()
 
-    # Guardar en Google Sheets
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_json, scope)
     client = gspread.authorize(creds)
     sheet = client.open('BBDD_RESPUESTAS').sheet1
 
-    # Construir fila con preguntas, reacciones y puntuaciones
     fila = st.session_state.respuestas_inversor + st.session_state.reacciones
     fila.extend([
         puntuaciones["Ambiental"],
