@@ -26,6 +26,8 @@ preguntas_inversor = [
     "¿Cuál es tu objetivo principal al invertir?",
     "¿Cuál es tu horizonte temporal de inversión?",
     "¿Tienes experiencia previa invirtiendo en activos de mayor riesgo como acciones, criptomonedas o fondos alternativos?",
+    "¿Estás dispuesto a sacrificar parte de la rentabilidad potencial a cambio de un impacto social o ambiental positivo?",
+    "¿Qué opinas sobre el cambio climático?"
 ]
 
 # Noticias
