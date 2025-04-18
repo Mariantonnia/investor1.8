@@ -9,10 +9,11 @@ import json
 from dotenv import load_dotenv
 import matplotlib.pyplot as plt
 
+# Cargar variables de entorno
 load_dotenv()
-
-# Configurar el modelo LLM
 os.environ["GROQ_API_KEY"] = os.getenv("GROQ_API_KEY")
+
+# Configurar LLM
 llm = ChatGroq(
     model="gemma2-9b-it",
     temperature=0,
@@ -36,103 +37,136 @@ noticias = [
     "Amancio Ortega crea un fondo de 100 millones de euros para los afectados de la dana",
     "Freshly Cosmetics despide a 52 empleados en Reus, el 18% de la plantilla",
     "Wall Street y los mercados globales caen ante la incertidumbre por la guerra comercial y el temor a una recesión",
-    "El mercado de criptomonedas se desploma: Bitcoin cae a 80.000 dólares, las altcoins se hunden en medio de una frenética liquidación"
+    "El mercado de criptomonedas se desploma: Bitcoin cae a 80.000 dólares, las altcoins se hunden en medio de una frenética liquidación",
+    "Granada retrasa seis meses el inicio de la Zona de Bajas Emisiones, previsto hasta ahora para abril",
+    "McDonald's donará a la Fundación Ronald McDonald todas las ganancias por ventas del Big Mac del 6 de diciembre",
+    "El Gobierno autoriza a altos cargos públicos a irse a Indra, Escribano, CEOE, Barceló, Iberdrola o Airbus",
+    "Las aportaciones a los planes de pensiones caen 10.000 millones en los últimos cuatro años"
 ]
 
-# Prompts
+# Plantillas
+plantilla_evaluacion = """
+Evalúa si esta respuesta del usuario es suficientemente detallada para un análisis ESG. 
+Criterios:
+- Claridad de la opinión
+- Especificidad respecto a la noticia
+- Mención de aspectos ESG (ambiental, social, gobernanza o riesgo)
+- Identificación de preocupaciones o riesgos
+
+Respuesta del usuario: {respuesta}
+
+Si es vaga o superficial, responde "False".
+Si contiene opinión sustancial y analizable, responde "True".
+
+Solo responde "True" o "False".
+"""
+prompt_evaluacion = PromptTemplate(template=plantilla_evaluacion, input_variables=["respuesta"])
+cadena_evaluacion = LLMChain(llm=llm, prompt=prompt_evaluacion)
+
 plantilla_reaccion = """
 Reacción del inversor: {reaccion}
-Analiza el sentimiento y la preocupación expresada.  
-Clasifica la preocupación principal en una de estas categorías:  
-- Ambiental  
-- Social  
-- Gobernanza  
-- Riesgo  
-
-Si la respuesta es demasiado breve o poco clara, solicita más detalles de manera específica.  
-
-Luego, genera una pregunta de seguimiento enfocada en la categoría detectada para profundizar en la opinión del inversor.  
-Por ejemplo:  
-- Si la categoría es Ambiental: "¿Cómo crees que esto afecta la sostenibilidad del sector?"  
-- Si la categoría es Social: "¿Crees que esto puede afectar la percepción pública de la empresa?"  
-- Si la categoría es Gobernanza: "¿Este evento te hace confiar más o menos en la gestión de la empresa?"  
-- Si la categoría es Riesgo: "¿Consideras que esto aumenta la incertidumbre en el mercado?" 
+Genera ÚNICAMENTE una pregunta de seguimiento enfocada en profundizar en su opinión.
+Ejemplo:  
+"¿Consideras que la existencia de mecanismos robustos de control interno y transparencia podría mitigar tu preocupación por la gobernanza corporativa en esta empresa?"
 """
 prompt_reaccion = PromptTemplate(template=plantilla_reaccion, input_variables=["reaccion"])
 cadena_reaccion = LLMChain(llm=llm, prompt=prompt_reaccion)
 
 plantilla_perfil = """
-Análisis de respuestas: {analisis}
-Genera un perfil detallado del inversor basado en sus respuestas, enfocándote en los pilares ESG (Ambiental, Social y Gobernanza) y su aversión al riesgo. 
-Asigna una puntuación de 0 a 100 para cada pilar ESG y para el riesgo, donde 0 indica ninguna preocupación y 100 máxima preocupación o aversión.
-Devuelve las 4 puntuaciones en formato: Ambiental: [puntuación], Social: [puntuación], Gobernanza: [puntuación], Riesgo: [puntuación]
+Análisis de reacciones: {analisis}
+Genera un perfil del inversor basado en ESG (Ambiental, Social y Gobernanza) y aversión al riesgo.
+Asigna puntuaciones de 0 a 100:
+
+Formato:
+Ambiental: [puntuación], Social: [puntuación], Gobernanza: [puntuación], Riesgo: [puntuación]
 """
 prompt_perfil = PromptTemplate(template=plantilla_perfil, input_variables=["analisis"])
 cadena_perfil = LLMChain(llm=llm, prompt=prompt_perfil)
 
-# Estado inicial
+# Función para procesar respuestas válidas a noticias
+def procesar_respuesta_valida(user_input):
+    pregunta_seguimiento = cadena_reaccion.run(reaccion=user_input).strip()
+    if st.session_state.contador_preguntas == 0:
+        with st.chat_message("bot", avatar="🤖"):
+            st.write(pregunta_seguimiento)
+        st.session_state.historial.append({"tipo": "bot", "contenido": pregunta_seguimiento})
+        st.session_state.pregunta_pendiente = True
+        st.session_state.contador_preguntas += 1
+    else:
+        st.session_state.reacciones.append(user_input)
+        st.session_state.contador += 1
+        st.session_state.mostrada_noticia = False
+        st.session_state.contador_preguntas = 0
+        st.session_state.pregunta_pendiente = False
+        st.rerun()
+
+# Inicializar estados
 if "historial" not in st.session_state:
     st.session_state.historial = []
     st.session_state.contador = 0
     st.session_state.reacciones = []
-    st.session_state.respuestas_inversor = []
-    st.session_state.contador_pregunta = 0
+    st.session_state.pregunta_general_idx = 0
+    st.session_state.pregunta_pendiente = False
+    st.session_state.contador_preguntas = 0
     st.session_state.mostrada_noticia = False
-    st.session_state.mostrada_pregunta = False
 
-st.title("Chatbot de Análisis de Sentimiento")
+# Interfaz
+st.title("Chatbot ESG & Perfil de Inversor")
 
 # Mostrar historial
 for mensaje in st.session_state.historial:
-    with st.chat_message(mensaje["tipo"]):
+    with st.chat_message(mensaje["tipo"], avatar="🤖" if mensaje["tipo"] == "bot" else None):
         st.write(mensaje["contenido"])
 
-# 1. PREGUNTAS INICIALES
-if st.session_state.contador_pregunta < len(preguntas_inversor):
-    if not st.session_state.mostrada_pregunta:
-        pregunta_actual = preguntas_inversor[st.session_state.contador_pregunta]
+# Preguntas iniciales
+if st.session_state.pregunta_general_idx < len(preguntas_inversor):
+    pregunta_actual = preguntas_inversor[st.session_state.pregunta_general_idx]
+    if not any(p["contenido"] == pregunta_actual for p in st.session_state.historial if p["tipo"] == "bot"):
+        st.session_state.historial.append({"tipo": "bot", "contenido": pregunta_actual})
         with st.chat_message("bot", avatar="🤖"):
             st.write(pregunta_actual)
-        st.session_state.historial.append({"tipo": "bot", "contenido": pregunta_actual})
-        st.session_state.mostrada_pregunta = True
 
     user_input = st.chat_input("Escribe tu respuesta aquí...")
-
-    if user_input:
-        st.session_state.historial.append({"tipo": "user", "contenido": user_input})
-        st.session_state.respuestas_inversor.append(user_input)
-        st.session_state.contador_pregunta += 1
-        st.session_state.mostrada_pregunta = False
-        st.rerun()
-    st.stop()
-
-# 2. NOTICIAS
-if st.session_state.contador < len(noticias):
-    if not st.session_state.mostrada_noticia:
-        noticia = noticias[st.session_state.contador]
-        with st.chat_message("bot", avatar="🤖"):
-            st.write(f"¿Qué opinas sobre esta noticia? {noticia}")
-        st.session_state.historial.append({"tipo": "bot", "contenido": noticia})
-        st.session_state.mostrada_noticia = True
-
-    user_input = st.chat_input("Escribe tu respuesta aquí...")
-
     if user_input:
         st.session_state.historial.append({"tipo": "user", "contenido": user_input})
         st.session_state.reacciones.append(user_input)
-        analisis_reaccion = cadena_reaccion.run(reaccion=user_input)
-        if len(user_input.split()) < 5:
-            with st.chat_message("bot", avatar="🤖"):
-                st.write("Podrías ampliar un poco más tu opinión?")
-            st.session_state.historial.append({"tipo": "bot", "contenido": "Podrías ampliar un poco más tu opinión?"})
-        else:
+        st.session_state.pregunta_general_idx += 1
+        st.rerun()
+
+# Noticias ESG
+elif st.session_state.contador < len(noticias):
+    if not st.session_state.mostrada_noticia:
+        noticia = noticias[st.session_state.contador]
+        texto_noticia = f"¿Qué opinas sobre esta noticia? {noticia}"
+        st.session_state.historial.append({"tipo": "bot", "contenido": texto_noticia})
+        with st.chat_message("bot", avatar="🤖"):
+            st.write(texto_noticia)
+        st.session_state.mostrada_noticia = True
+
+    user_input = st.chat_input("Escribe tu respuesta aquí...")
+    if user_input:
+        st.session_state.historial.append({"tipo": "user", "contenido": user_input})
+        if st.session_state.pregunta_pendiente:
+            st.session_state.reacciones.append(user_input)
             st.session_state.contador += 1
             st.session_state.mostrada_noticia = False
+            st.session_state.contador_preguntas = 0
+            st.session_state.pregunta_pendiente = False
             st.rerun()
+        else:
+            evaluacion = cadena_evaluacion.run(respuesta=user_input).strip().lower()
+            if evaluacion == "false":
+                pregunta_ampliacion = cadena_reaccion.run(reaccion=user_input).strip()
+                with st.chat_message("bot", avatar="🤖"):
+                    st.write(pregunta_ampliacion)
+                st.session_state.historial.append({"tipo": "bot", "contenido": pregunta_ampliacion})
+                st.session_state.pregunta_pendiente = True
+            else:
+                procesar_respuesta_valida(user_input)
 
-# 3. PERFIL Y GUARDADO
+# Perfil final
 else:
-    analisis_total = "\n".join(st.session_state.respuestas_inversor + st.session_state.reacciones)
+    analisis_total = "\n".join(st.session_state.reacciones)
     perfil = cadena_perfil.run(analisis=analisis_total)
 
     with st.chat_message("bot", avatar="🤖"):
@@ -146,34 +180,32 @@ else:
         "Riesgo": int(re.search(r"Riesgo: (\d+)", perfil).group(1)),
     }
 
-    categorias = list(puntuaciones.keys())
-    valores = list(puntuaciones.values())
-
     fig, ax = plt.subplots()
-    ax.bar(categorias, valores)
+    ax.bar(puntuaciones.keys(), puntuaciones.values(), color="skyblue")
     ax.set_ylabel("Puntuación (0-100)")
     ax.set_title("Perfil del Inversor")
     st.pyplot(fig)
 
+    # Guardar en Google Sheets
     try:
         creds_json_str = st.secrets["gcp_service_account"]
         creds_json = json.loads(creds_json_str)
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_json, scope)
+        client = gspread.authorize(creds)
+        sheet = client.open('BBDD_RESPUESTAS').sheet1
+        fila = st.session_state.reacciones + list(puntuaciones.values())
+        sheet.append_row(fila)
+        st.success("Datos guardados exitosamente en Google Sheets")
     except Exception as e:
-        st.error(f"Error al cargar las credenciales: {e}")
-        st.stop()
+        st.error(f"Error al guardar datos: {str(e)}")
 
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_json, scope)
-    client = gspread.authorize(creds)
-    sheet = client.open('BBDD_RESPUESTAS').sheet1
-
-    fila = st.session_state.respuestas_inversor + st.session_state.reacciones
-    fila.extend([
-        puntuaciones["Ambiental"],
-        puntuaciones["Social"],
-        puntuaciones["Gobernanza"],
-        puntuaciones["Riesgo"]
-    ])
-    sheet.append_row(fila)
-
-    st.success("Respuestas y perfil guardados en Google Sheets en una misma fila.")
+# Autofocus input
+st.markdown("""
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const input = document.querySelector('.stChatInput textarea');
+    if(input) input.focus();
+});
+</script>
+""", unsafe_allow_html=True)
