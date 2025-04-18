@@ -16,7 +16,7 @@ os.environ["GROQ_API_KEY"] = os.getenv("GROQ_API_KEY")
 llm = ChatGroq(
     model="gemma2-9b-it",
     temperature=0,
-    max_tokens=None,
+    max_tokens=512,
     timeout=None,
     max_retries=2,
 )
@@ -79,6 +79,8 @@ if "historial" not in st.session_state:
     st.session_state.contador_pregunta = 0
     st.session_state.mostrada_noticia = False
     st.session_state.mostrada_pregunta = False
+    st.session_state.mostrar_cuestionario = False
+    st.session_state.cuestionario_enviado = False
 
 st.title("Chatbot de Análisis de Sentimiento")
 
@@ -130,18 +132,23 @@ if st.session_state.contador < len(noticias):
             st.session_state.mostrada_noticia = False
             st.rerun()
 
-# Perfil final y test tradicional
+# 3. PERFIL Y CUESTIONARIO FINAL
 else:
     if not st.session_state.mostrar_cuestionario:
         analisis_total = "\n".join(st.session_state.reacciones)
         perfil = cadena_perfil.run(analisis=analisis_total)
 
-        puntuaciones = {
-            "Ambiental": int(re.search(r"Ambiental: (\d+)", perfil).group(1)),
-            "Social": int(re.search(r"Social: (\d+)", perfil).group(1)),
-            "Gobernanza": int(re.search(r"Gobernanza: (\d+)", perfil).group(1)),
-            "Riesgo": int(re.search(r"Riesgo: (\d+)", perfil).group(1)),
-        }
+        try:
+            puntuaciones = {
+                "Ambiental": int(re.search(r"Ambiental: (\d+)", perfil).group(1)),
+                "Social": int(re.search(r"Social: (\d+)", perfil).group(1)),
+                "Gobernanza": int(re.search(r"Gobernanza: (\d+)", perfil).group(1)),
+                "Riesgo": int(re.search(r"Riesgo: (\d+)", perfil).group(1)),
+            }
+        except Exception as e:
+            st.error(f"No se pudieron extraer las puntuaciones del perfil: {e}")
+            st.stop()
+
         st.session_state.perfil_valores = puntuaciones
 
         with st.chat_message("bot", avatar="🤖"):
