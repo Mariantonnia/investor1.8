@@ -35,7 +35,7 @@ Tu turno:
 )
 cadena_ampliacion = LLMChain(llm=llm, prompt=prompt_ampliacion)
 
-# Plantilla para generar el perfil
+# Plantilla para generar perfil ESG
 plantilla_perfil = """
 Dado este conjunto de respuestas del usuario:
 {analisis}
@@ -48,7 +48,14 @@ Ambiental: [puntuación], Social: [puntuación], Gobernanza: [puntuación], Ries
 prompt_perfil = PromptTemplate(template=plantilla_perfil, input_variables=["analisis"])
 cadena_perfil = LLMChain(llm=llm, prompt=prompt_perfil)
 
-# Noticias de ejemplo
+# Preguntas iniciales
+preguntas_iniciales = [
+    "¿Qué importancia le das a que una empresa tenga prácticas sostenibles?",
+    "¿Cómo te afecta que una empresa tenga escándalos laborales o sociales?",
+    "¿Qué opinas sobre la transparencia y ética en la gestión empresarial?",
+]
+
+# Noticias reales para evaluar percepción ESG
 noticias = [
     "Repsol, entre las 50 empresas que más responsabilidad histórica tienen en el calentamiento global",
     "Amancio Ortega crea un fondo de 100 millones de euros para los afectados de la dana",
@@ -58,8 +65,10 @@ noticias = [
 ]
 
 # Estado inicial
-if "idx" not in st.session_state:
-    st.session_state.idx = 0
+if "fase" not in st.session_state:
+    st.session_state.fase = "preguntas_iniciales"
+    st.session_state.idx_pregunta = 0
+    st.session_state.idx_noticia = 0
     st.session_state.historial = []
     st.session_state.reacciones = []
     st.session_state.pendiente_ampliacion = False
@@ -69,34 +78,63 @@ for m in st.session_state.historial:
     with st.chat_message(m["tipo"]):
         st.markdown(m["contenido"])
 
-# Flujo principal
-if st.session_state.idx < len(noticias):
-    if not st.session_state.pendiente_ampliacion:
-        noticia = noticias[st.session_state.idx]
-        pregunta = f"¿Qué opinas sobre esta noticia? {noticia}"
+# Flujo: Preguntas iniciales
+if st.session_state.fase == "preguntas_iniciales":
+    if st.session_state.idx_pregunta < len(preguntas_iniciales):
+        pregunta = preguntas_iniciales[st.session_state.idx_pregunta]
         st.session_state.historial.append({"tipo": "bot", "contenido": pregunta})
         with st.chat_message("bot"):
             st.markdown(pregunta)
-        st.session_state.pendiente_ampliacion = True
 
-    user_input = st.chat_input("Escribe tu respuesta aquí...")
-    if user_input:
-        st.session_state.historial.append({"tipo": "user", "contenido": user_input})
+        user_input = st.chat_input("Escribe tu respuesta aquí...")
+        if user_input:
+            st.session_state.historial.append({"tipo": "user", "contenido": user_input})
 
-        palabras_clave = re.findall(r'\w+', user_input)
-        if len(palabras_clave) < 5:
-            ampliacion = cadena_ampliacion.run(texto=user_input).strip()
-            with st.chat_message("bot"):
-                st.markdown(ampliacion)
-            st.session_state.historial.append({"tipo": "bot", "contenido": ampliacion})
-        else:
-            st.session_state.reacciones.append(user_input)
-            st.session_state.idx += 1
-            st.session_state.pendiente_ampliacion = False
+            palabras_clave = re.findall(r'\w+', user_input)
+            if len(palabras_clave) < 5:
+                ampliacion = cadena_ampliacion.run(texto=user_input).strip()
+                with st.chat_message("bot"):
+                    st.markdown(ampliacion)
+                st.session_state.historial.append({"tipo": "bot", "contenido": ampliacion})
+            else:
+                st.session_state.reacciones.append(user_input)
+                st.session_state.idx_pregunta += 1
+            st.rerun()
+    else:
+        st.session_state.fase = "noticias"
         st.rerun()
 
-# Resultado final: Perfil ESG
-else:
+# Flujo: Reacciones a noticias
+elif st.session_state.fase == "noticias":
+    if st.session_state.idx_noticia < len(noticias):
+        if not st.session_state.pendiente_ampliacion:
+            noticia = noticias[st.session_state.idx_noticia]
+            pregunta = f"¿Qué opinas sobre esta noticia? {noticia}"
+            st.session_state.historial.append({"tipo": "bot", "contenido": pregunta})
+            with st.chat_message("bot"):
+                st.markdown(pregunta)
+            st.session_state.pendiente_ampliacion = True
+
+        user_input = st.chat_input("Escribe tu respuesta aquí...")
+        if user_input:
+            st.session_state.historial.append({"tipo": "user", "contenido": user_input})
+            palabras_clave = re.findall(r'\w+', user_input)
+            if len(palabras_clave) < 5:
+                ampliacion = cadena_ampliacion.run(texto=user_input).strip()
+                with st.chat_message("bot"):
+                    st.markdown(ampliacion)
+                st.session_state.historial.append({"tipo": "bot", "contenido": ampliacion})
+            else:
+                st.session_state.reacciones.append(user_input)
+                st.session_state.idx_noticia += 1
+                st.session_state.pendiente_ampliacion = False
+            st.rerun()
+    else:
+        st.session_state.fase = "perfil"
+        st.rerun()
+
+# Flujo: Perfil ESG
+elif st.session_state.fase == "perfil":
     if "perfil_generado" not in st.session_state:
         analisis = "\n".join(st.session_state.reacciones)
         perfil = cadena_perfil.run(analisis=analisis)
@@ -107,7 +145,6 @@ else:
     with st.chat_message("bot"):
         st.markdown(f"**Perfil ESG del inversor:**\n\n{perfil}")
 
-    # Graficar
     try:
         puntuaciones = {
             "Ambiental": int(re.search(r"Ambiental: (\d+)", perfil).group(1)),
@@ -122,7 +159,6 @@ else:
         ax.set_title("Perfil del Inversor")
         st.pyplot(fig)
 
-        # Guardar en Google Sheets
         try:
             creds_json_str = st.secrets["gcp_service_account"]
             creds_json = json.loads(creds_json_str)
