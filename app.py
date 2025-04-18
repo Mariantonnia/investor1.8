@@ -16,7 +16,7 @@ os.environ["GROQ_API_KEY"] = os.getenv("GROQ_API_KEY")
 llm = ChatGroq(
     model="gemma2-9b-it",
     temperature=0,
-    max_tokens=512,
+    max_tokens=None,
     timeout=None,
     max_retries=2,
 )
@@ -52,11 +52,6 @@ Clasifica la preocupación principal en una de estas categorías:
 Si la respuesta es demasiado breve o poco clara, solicita más detalles de manera específica.  
 
 Luego, genera una pregunta de seguimiento enfocada en la categoría detectada para profundizar en la opinión del inversor.  
-Por ejemplo:  
-- Si la categoría es Ambiental: "¿Cómo crees que esto afecta la sostenibilidad del sector?"  
-- Si la categoría es Social: "¿Crees que esto puede afectar la percepción pública de la empresa?"  
-- Si la categoría es Gobernanza: "¿Este evento te hace confiar más o menos en la gestión de la empresa?"  
-- Si la categoría es Riesgo: "¿Consideras que esto aumenta la incertidumbre en el mercado?" 
 """
 prompt_reaccion = PromptTemplate(template=plantilla_reaccion, input_variables=["reaccion"])
 cadena_reaccion = LLMChain(llm=llm, prompt=prompt_reaccion)
@@ -132,7 +127,7 @@ if st.session_state.contador < len(noticias):
             st.session_state.mostrada_noticia = False
             st.rerun()
 
-# 3. PERFIL Y CUESTIONARIO FINAL
+# 3. PERFIL Y CUESTIONARIO
 else:
     if not st.session_state.mostrar_cuestionario:
         analisis_total = "\n".join(st.session_state.reacciones)
@@ -150,73 +145,69 @@ else:
             st.stop()
 
         st.session_state.perfil_valores = puntuaciones
+        st.session_state.perfil_texto = perfil
+        st.session_state.mostrar_cuestionario = True
 
+    # Mostrar perfil y gráfico SIEMPRE
+    if "perfil_valores" in st.session_state:
         with st.chat_message("bot", avatar="🤖"):
-            st.write(f"**Perfil del inversor:** {perfil}")
+            st.write(f"**Perfil del inversor:** {st.session_state.perfil_texto}")
 
         fig, ax = plt.subplots()
-        ax.bar(puntuaciones.keys(), puntuaciones.values(), color="skyblue")
+        ax.bar(st.session_state.perfil_valores.keys(), st.session_state.perfil_valores.values(), color="skyblue")
         ax.set_ylabel("Puntuación (0-100)")
         ax.set_title("Perfil del Inversor")
         st.pyplot(fig)
 
-        st.session_state.mostrar_cuestionario = True
-        st.markdown("""
-        <script>
-        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-        </script>
-        """, unsafe_allow_html=True)
+    st.header("Cuestionario Final de Perfilado")
 
-    if st.session_state.mostrar_cuestionario:
-        st.header("Cuestionario Final de Perfilado")
+    with st.form("formulario_final"):
+        objetivo = st.radio("2.1. ¿Cuál es tu objetivo principal al invertir?", ["Preservar el capital (bajo riesgo)", "Obtener rentabilidad moderada", "Maximizar la rentabilidad (alto riesgo)"], index=None)
+        horizonte = st.radio("2.2. ¿Cuál es tu horizonte temporal de inversión?", ["Menos de 1 año", "Entre 1 y 5 años", "Más de 5 años"], index=None)
 
-        with st.form("formulario_final"):
-            objetivo = st.radio("2.1. ¿Cuál es tu objetivo principal al invertir?", ["Preservar el capital (bajo riesgo)", "Obtener rentabilidad moderada", "Maximizar la rentabilidad (alto riesgo)"], index=None)
-            horizonte = st.radio("2.2. ¿Cuál es tu horizonte temporal de inversión?", ["Menos de 1 año", "Entre 1 y 5 años", "Más de 5 años"], index=None)
+        productos = st.multiselect("3.1. ¿Qué productos financieros conoces o has utilizado?", ["Cuentas de ahorro", "Fondos de inversión", "Acciones", "Bonos", "Derivados (futuros, opciones, CFD)", "Criptomonedas"])
+        productos_str = ", ".join(productos) if productos else ""
 
-            productos = st.multiselect("3.1. ¿Qué productos financieros conoces o has utilizado?", ["Cuentas de ahorro", "Fondos de inversión", "Acciones", "Bonos", "Derivados (futuros, opciones, CFD)", "Criptomonedas"])
-            productos_str = ", ".join(productos) if productos else ""
+        volatilidad = st.radio("3.2. ¿Qué significa que una inversión tenga alta volatilidad?", ["Que tiene una rentabilidad garantizada", "Que su valor puede subir o bajar de forma significativa", "Que no se puede vender fácilmente"], index=None)
+        largo_plazo = st.radio("3.3. ¿Qué ocurre si mantienes una inversión en renta variable durante un largo periodo?", ["Siempre pierdes dinero", "Se reduce el riesgo en comparación con el corto plazo", "No afecta en nada al riesgo"], index=None)
 
-            volatilidad = st.radio("3.2. ¿Qué significa que una inversión tenga alta volatilidad?", ["Que tiene una rentabilidad garantizada", "Que su valor puede subir o bajar de forma significativa", "Que no se puede vender fácilmente"], index=None)
-            largo_plazo = st.radio("3.3. ¿Qué ocurre si mantienes una inversión en renta variable durante un largo periodo?", ["Siempre pierdes dinero", "Se reduce el riesgo en comparación con el corto plazo", "No afecta en nada al riesgo"], index=None)
+        frecuencia = st.radio("4.1. ¿Con qué frecuencia realizas inversiones?", ["Nunca", "Ocasionalmente (1 vez al año)", "Regularmente (varias veces al año)"], index=None)
+        experiencia = st.radio("4.2. ¿Cuántos años llevas invirtiendo en productos financieros complejos?", ["Ninguno", "Menos de 2 años", "Más de 2 años"], index=None)
 
-            frecuencia = st.radio("4.1. ¿Con qué frecuencia realizas inversiones?", ["Nunca", "Ocasionalmente (1 vez al año)", "Regularmente (varias veces al año)"], index=None)
-            experiencia = st.radio("4.2. ¿Cuántos años llevas invirtiendo en productos financieros complejos?", ["Ninguno", "Menos de 2 años", "Más de 2 años"], index=None)
+        reaccion_20 = st.radio("5.1. ¿Qué harías si tu inversión pierde un 20% en un mes?", ["Vendería todo inmediatamente", "Esperaría a ver si se recupera", "Invertiría más, aprovechando la caída"], index=None)
+        combinacion = st.radio("5.2. ¿Cuál de las siguientes combinaciones preferirías?", ["Rentabilidad esperada 2%, riesgo muy bajo", "Rentabilidad esperada 5%, riesgo moderado", "Rentabilidad esperada 10%, riesgo alto"], index=None)
 
-            reaccion_20 = st.radio("5.1. ¿Qué harías si tu inversión pierde un 20% en un mes?", ["Vendería todo inmediatamente", "Esperaría a ver si se recupera", "Invertiría más, aprovechando la caída"], index=None)
-            combinacion = st.radio("5.2. ¿Cuál de las siguientes combinaciones preferirías?", ["Rentabilidad esperada 2%, riesgo muy bajo", "Rentabilidad esperada 5%, riesgo moderado", "Rentabilidad esperada 10%, riesgo alto"], index=None)
+        sostenibilidad = st.radio("6.1. ¿Te interesa que tus inversiones consideren criterios de sostenibilidad?", ["Sí", "No", "No lo sé"], index=None)
+        fondo_clima = st.radio("6.2. ¿Preferirías un fondo que invierte en empresas contra el cambio climático aunque la rentabilidad sea menor?", ["Sí", "No"], index=None)
+        importancia = st.radio("6.3. ¿Qué importancia das a no financiar sectores controvertidos?", ["Alta", "Media", "Baja"], index=None)
 
-            sostenibilidad = st.radio("6.1. ¿Te interesa que tus inversiones consideren criterios de sostenibilidad?", ["Sí", "No", "No lo sé"], index=None)
-            fondo_clima = st.radio("6.2. ¿Preferirías un fondo que invierte en empresas contra el cambio climático aunque la rentabilidad sea menor?", ["Sí", "No"], index=None)
-            importancia = st.radio("6.3. ¿Qué importancia das a no financiar sectores controvertidos?", ["Alta", "Media", "Baja"], index=None)
+        enviar = st.form_submit_button("Enviar respuestas")
 
-            enviar = st.form_submit_button("Enviar respuestas")
+        if enviar:
+            try:
+                creds_json_str = st.secrets["gcp_service_account"]
+                creds_json = json.loads(creds_json_str)
+                scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+                creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_json, scope)
+                client = gspread.authorize(creds)
+                sheet = client.open('BBDD_RESPUESTAS').sheet1
 
-            if enviar:
-                try:
-                    creds_json_str = st.secrets["gcp_service_account"]
-                    creds_json = json.loads(creds_json_str)
-                    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-                    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_json, scope)
-                    client = gspread.authorize(creds)
-                    sheet = client.open('BBDD_RESPUESTAS').sheet1
+                fila = st.session_state.respuestas_inversor + st.session_state.reacciones + [
+                    str(st.session_state.perfil_valores.get("Ambiental", "")),
+                    str(st.session_state.perfil_valores.get("Social", "")),
+                    str(st.session_state.perfil_valores.get("Gobernanza", "")),
+                    str(st.session_state.perfil_valores.get("Riesgo", "")),
+                    objetivo or "", horizonte or "", productos_str, volatilidad or "", largo_plazo or "",
+                    frecuencia or "", experiencia or "", reaccion_20 or "", combinacion or "",
+                    sostenibilidad or "", fondo_clima or "", importancia or ""
+                ]
 
-                    fila = st.session_state.reacciones + [
-                        str(st.session_state.perfil_valores.get("Ambiental", "")),
-                        str(st.session_state.perfil_valores.get("Social", "")),
-                        str(st.session_state.perfil_valores.get("Gobernanza", "")),
-                        str(st.session_state.perfil_valores.get("Riesgo", "")),
-                        objetivo or "", horizonte or "", productos_str, volatilidad or "", largo_plazo or "",
-                        frecuencia or "", experiencia or "", reaccion_20 or "", combinacion or "",
-                        sostenibilidad or "", fondo_clima or "", importancia or ""
-                    ]
+                sheet.append_row(fila)
+                st.success("Respuestas enviadas y guardadas exitosamente")
+                st.session_state.cuestionario_enviado = True
+                st.balloons()
+            except Exception as e:
+                st.error(f"❌ Error al guardar datos: {str(e)}")
 
-                    sheet.append_row(fila)
-                    st.success("Respuestas enviadas y guardadas exitosamente")
-                    st.session_state.cuestionario_enviado = True
-                    st.balloons()
-                except Exception as e:
-                    st.error(f"❌ Error al guardar datos: {str(e)}")
-
-        if st.session_state.cuestionario_enviado:
-            st.markdown("### ¡Gracias por completar tu perfil de inversor!")
+    if st.session_state.cuestionario_enviado:
+        st.markdown("### ¡Gracias por completar tu perfil de inversor!")
