@@ -77,8 +77,12 @@ if "historial" not in st.session_state:
     st.session_state.mostrar_cuestionario = False
     st.session_state.cuestionario_enviado = False
 
-st.title("Chatbot de Análisis de Sentimiento")
-
+# Interfaz
+st.title("Chatbot de Análisis de Inversor ESG")
+st.markdown("""
+**Primero interactuarás con un chatbot para evaluar tu perfil ESG.** 
+**Al final, completarás un test tradicional de perfilado.**
+""")
 # Mostrar historial
 for mensaje in st.session_state.historial:
     with st.chat_message(mensaje["tipo"]):
